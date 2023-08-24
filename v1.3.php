@@ -244,7 +244,7 @@ function chatgpt_ava_private_rewrite()
             if (strlen(preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($content))) > $max_characters) {
                 error_log('inside chatgpt_ava_truncate_content > mb_strlen(): ' . print_r(mb_strlen($content), true)."\n", 3, CUSTOM_LOG_PATH);
                 // Truncate the content to fit within the character limit
-                $content = mb_substr($content, 0, $max_characters);
+                $content = mb_substr(strip_tags($content), 0, $max_characters);
                 error_log('full content: ' . print_r($content, true)."\n", 3, CUSTOM_LOG_PATH);
 
             }
@@ -309,40 +309,67 @@ function chatgpt_ava_private_rewrite()
         $post = get_post($post_id);
 
         $content = $post->post_content;
+        
         // filter content Yallakora.com (1) case
+        // Check if the content contains "اقرأ أيضاً.." text
+        if (strpos($content, 'اقرأ أيضا:') !== false) {
 
-        // Remove "اقرأ أيضاً.." text
-        $content = preg_replace('/اقرأ أيضاً\.\./', '', $content);
+            // Remove "اقرأ أيضاً.." text
+            $content = preg_replace('/اقرأ أيضا:/', '', $content);
+            error_log('----mm\'----'. $content ."\n", 3, CUSTOM_LOG_PATH);
 
-        // Split content into paragraphs
-        $paragraphs = explode('</p>', $content);
+            // Solving empty article return because of ' single quotation
+            $content = str_replace("'", '[SINGLE_QUOTE]', $content); // Replace single quotation marks with a placeholder
+            $content = str_replace('"', '[DOUBLE_QUOTE]', $content); // Replace double quotation marks with a placeholder
 
-        // Find paragraphs with <a> tags and remove following paragraphs
-        $new_content = '';
-        $inside_link_paragraph = false;
-        foreach ($paragraphs as $paragraph) {
-            if (strpos($paragraph, '<a') !== false) {
-                $inside_link_paragraph = true;
+            error_log('----xx\'----'. $content ."\n", 3, CUSTOM_LOG_PATH);
+
+            // Split content into paragraphs
+            $paragraphs = explode('</p>', $content);
+            error_log('----pp\'----'. $paragraphs ."\n", 3, CUSTOM_LOG_PATH);
+
+            // Find paragraphs with <a> tags and remove following paragraphs
+            $new_content = '';
+            $inside_link_paragraph = false;
+            foreach ($paragraphs as $paragraph) {
+                error_log('----ff\'----' ."\n", 3, CUSTOM_LOG_PATH);
+                if (strpos($paragraph, '<a') !== false) {
+                    $inside_link_paragraph = true;
+                    error_log('----if1\'----' ."\n", 3, CUSTOM_LOG_PATH);
+                }
+                if (!$inside_link_paragraph) {
+                    $new_content .= $paragraph . '</p>';
+                    error_log('----if2\'----' ."\n", 3, CUSTOM_LOG_PATH);                
+                }
+                if (strpos($paragraph, '</a>') !== false) {
+                    $inside_link_paragraph = false;
+                    error_log('----if3\'----' ."\n", 3, CUSTOM_LOG_PATH);                
+                }
             }
-            if (!$inside_link_paragraph) {
-                $new_content .= $paragraph . '</p>';
-            }
-            if (strpos($paragraph, '</a>') !== false) {
-                $inside_link_paragraph = false;
-            }
+
+            error_log('----------------------------------------' ."\n", 3, CUSTOM_LOG_PATH);
+            // After processing, replace the placeholders back with single quotation marks
+            $new_content = str_replace('[SINGLE_QUOTE]', "'", $new_content);
+            $new_content = str_replace('[DOUBLE_QUOTE]', '"', $new_content);
+            error_log('-- Yallakora case(1) --: ' . $new_content ."\n", 3, CUSTOM_LOG_PATH);
+
+            // Check if filtered content is empty
+            //if (empty($new_content)) {
+            //    return $content; // Return original content if filtered content is empty
+            //    error_log('** ALERT ************************* : '."\n", 3, CUSTOM_LOG_PATH);
+            //}
+            error_log('** ALERT ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ : '."\n", 3, CUSTOM_LOG_PATH);
+            return $new_content;            
         }
-
-        //error_log('-- Yallakora case(1) --: ' . $new_content ."\n", 3, CUSTOM_LOG_PATH);
-        error_log('----------------------------------------' ."\n", 3, CUSTOM_LOG_PATH);
-        //error_log('-- inside first if : '."\n", 3, CUSTOM_LOG_PATH);
-        return $new_content;
+        error_log('** ALERT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% : '."\n", 3, CUSTOM_LOG_PATH);
+        return $content; // Return original content if "اقرأ أيضاً.." text is not found
     }
 
     // Helper function to count words in a text
     function count_words($text)
     {
         if ($text !== false && is_string($text)) {
-            return str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );//preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text_to_count)) 
+            return str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
         } else {
             // Handle the case where content generation failed
             return 0;
@@ -414,18 +441,21 @@ function chatgpt_ava_private_rewrite()
         // Check if the post has a featured image
         if (!has_featured_image($post->ID)) {
             // If the post doesn't have a featured image, delete and skip this post
-            //wp_trash_post($post->ID, true);
             wp_delete_post($post->ID, true);
             continue;
         // Rest of the code to generate and update content based on the API response...
         } else {
             // filter added text like more news ...
             $filterd_content = filter_row_post_content($post->ID);
-            // Let's treminate articles less than 130 Word in total, cuase ChatGPT can convert 131 to 200 word fine...
-            // handeling short content but long not yet!
-            // 3800 CHARACTER 3650 MAX GOOD
-            
-            if (!count_and_manage_posts($post->ID, $filterd_content) ){
+            // if <p> filteration return empty article cause of any Special characters issues inside article
+            //  I don't have to apply nested code anymore, it's fine to break evrything with this type of posts / Special characters
+            // stop before send to API
+            if (empty($filterd_content)) {
+                wp_trash_post($post->ID, true);
+                break; // now this case will nver happen, it's useless code
+            }
+            // Let's treminate articles less than 130 Word in total, cuase ChatGPT can convert 131 to 200 word fine...            
+            elseif (!count_and_manage_posts($post->ID, $filterd_content) ){
                 continue;
             } else {
 
@@ -437,7 +467,6 @@ function chatgpt_ava_private_rewrite()
                 // Limit the content length if needed
                 $max_tokens = 3310; // Model's maximum context length
                 $filtered_content = chatgpt_ava_truncate_content($post_content, $max_tokens);
-
                 $message = "Rewrite this article {$filtered_content}, covering it to become less than 400 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, focus on summarizing and shortening the content, and make sure it's at least not less than 300 words. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) make sure that 25% of the sentences you write contain less than 20 words.";
 
                 // Generate content and check word count until it meets the minimum requirement
