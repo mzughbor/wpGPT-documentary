@@ -303,6 +303,26 @@ function chatgpt_ava_private_rewrite()
         error_log('-- End of count_and_manage_posts function --' ."\n", 3, CUSTOM_LOG_PATH);
     }
 
+    // Regenerating post title with handeling the empyt title situation
+    function regenerate_post_title($post_id, $new_title) {
+        $post = get_post($post_id);
+
+        // Check if the post title is empty
+        if (empty($post->post_title)) {
+            return false; // Return zero if title is empty
+        }
+        
+        // Update the post title
+        $updated_post = array(
+            'ID' => $post_id,
+            'post_title' => $new_title,
+        );
+
+        wp_update_post($updated_post);
+
+        return true; // Return 1 to indicate title regeneration was successful
+    }
+
     // Filteration function for all inclusions and exclusions like more news and so on...
     function filter_row_post_content($post_id){
 
@@ -485,7 +505,8 @@ function chatgpt_ava_private_rewrite()
 
                 $min_word_count = 250; //min_word_generated_count
                 if ($word_count == 0) {
-                    $result = wp_delete_post($post->ID, true); 
+                    $result = wp_delete_post($post->ID, true);
+                    error_log('error post deleted :: ID' . $post->ID ."\n", 3, CUSTOM_LOG_PATH); 
                 }
 
                 elseif ($word_count <= $min_word_count) {
@@ -499,7 +520,7 @@ function chatgpt_ava_private_rewrite()
 
 
                         // Array of words to search for in the response
-                        $search_words = array('Of course', 'Certainly', 'Sure', 'help', 'questions', 'assisting', 'tasks', 'today', 'assist');
+                        $search_words = array('of course', 'certainly', 'sure', 'help', 'questions', 'assisting', 'tasks', 'today', 'assist');
 
                         // Check if any of the words exist in the response
                         $found_words = array();
@@ -548,12 +569,12 @@ function chatgpt_ava_private_rewrite()
                             // The user (ChatGPT) is not done, ask to continue generating content
                             $message = "please continue";
                             //$filtered_content = chatgpt_ava_truncate_content($message, $max_tokens);
-                            $new_content = generate_content_with_min_word_count($message, $api_key);
+                            $new_content_2 = generate_content_with_min_word_count($message, $api_key);
                             sleep(12);
 
 
                             foreach ($search_words as $word) {
-                                if (strpos($new_content, $word) !== false) {
+                                if (strpos($new_content_2, $word) !== false) {
                                     $found_words[] = $word;
                                 }
                             }
@@ -572,11 +593,12 @@ function chatgpt_ava_private_rewrite()
                                 // None of the words were found in the $response
                                 error_log('The response does not contain any of the specified words: 2'."\n", true, 3, CUSTOM_LOG_PATH);
 
-                                $generated_content .= $new_content;
+                                $generated_content .= $new_content_2;
                                 $word_count = count_words($generated_content);
-                                puplish_now($post->ID,$generated_content);
+                                //puplish_now($post->ID,$generated_content); mistake ???
                             }
-
+                            // emptty after $message = "continue" every time
+                            unset($found_words);
                         // raear to happen here this else case...1/aug / not very sure
                         } else {
                         // Log the error for debugging
