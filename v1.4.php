@@ -2,7 +2,7 @@
 /*
 Plugin Name: ChatGPT with Ava - Private Rewrites
 Description: Rewrite private post content using ChatGPT API as a cron job.
-Version: 1.3
+Version: 1.4
 Author: mZughbor
 */
 define('CUSTOM_LOG_PATH', plugin_dir_path(__FILE__) . 'log.txt');
