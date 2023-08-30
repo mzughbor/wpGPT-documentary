@@ -213,6 +213,9 @@ add_action('wp', 'chatgpt_ava_schedule_private_rewrites');
 
 function remove_custom_news($content) {
 
+    // kora plus + content
+    // yalla kora 
+
     // Define the ID of the div you want to remove
     $div_id_to_remove = 'After_F_Paragraph';
 
@@ -259,7 +262,8 @@ function remove_custom_news($content) {
     // Pattern to match paragraphs or h3 elements with links
     $pattern_with_links = '/<(p|h3)>.*<a.*<\/(p|h3)>/u';
 
-    // hinit problem for the word having link tag , the entir prargaraph will be gone!!        
+    // future update
+    // hint problem for the word having link tag , the entir prargaraph will be gone!!        
 
     // Find paragraphs or h3 elements with links
     preg_match_all($pattern_with_links, $content, $matches);
@@ -312,15 +316,20 @@ function chatgpt_ava_private_rewrite()
             // Check if the content length exceeds the maximum characters
             //if (mb_strlen($content) > $max_characters) {
             if (strlen(preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($content))) > $max_characters) {
-                error_log('inside chatgpt_ava_truncate_content > mb_strlen(): ' . print_r(mb_strlen($content), true)."\n", 3, CUSTOM_LOG_PATH);
+                
+                //to delete
+                error_log('**inside chatgpt_ava_truncate_content > mb_strlen(): ' . print_r(strlen($content), true)."\n", 3, CUSTOM_LOG_PATH);
+                error_log('**inside chatgpt_ava_truncate_content > mb_strlen(preg_replace(...)): ' . print_r(strlen(preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($content)), true))."\n", 3, CUSTOM_LOG_PATH);
+                
                 // Truncate the content to fit within the character limit
                 $content = mb_substr(strip_tags($content), 0, $max_characters);
+                
                 error_log('full content: ' . print_r($content, true)."\n", 3, CUSTOM_LOG_PATH);
 
             }
             return $content;
         }
-        //
+        // future update
         // here we have to work to make it come rally with paragraphs so we solve cutting issue
         //
 
@@ -333,8 +342,10 @@ function chatgpt_ava_private_rewrite()
         $min_word_count = 115;
         $post = get_post($post_id);
 
+        error_log('-- Start of count_and_manage_posts :: ' . $post->ID ."\n", 3, CUSTOM_LOG_PATH);
         error_log('-- post id : ' . $post->ID ."\n", 3, CUSTOM_LOG_PATH);
         //error_log('-- post id : ' . $post ."\n", 3, CUSTOM_LOG_PATH);// make issue...
+
         // when it's run inside loop?
         if ($post && $post->post_type === 'post') {
 
@@ -350,10 +361,11 @@ function chatgpt_ava_private_rewrite()
             $word_count = str_word_count(preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($content)) );
             //$word_count = str_word_count($content);
 
+            error_log('-- here is $word count : '. $word_count ."\n", 3, CUSTOM_LOG_PATH);
+
             // the only one thing we missing in this counting function is numbers 10 100 1000 any numbers
 
             if ($word_count < $min_word_count || $ch_string_length > $max_char_count) {
-                error_log('-- here is $word count : '. $word_count ."\n", 3, CUSTOM_LOG_PATH);
                 // Update post status to draft
                 wp_update_post(array(
                     'ID' => $post_id,
@@ -361,7 +373,7 @@ function chatgpt_ava_private_rewrite()
                 ));
 
 
-                error_log('(+_+) Content ::' . $content ."\n", 3, CUSTOM_LOG_PATH);
+                error_log('(+_+) after convert to draft, Content ::' . $content ."\n", 3, CUSTOM_LOG_PATH);
 
 
                 // Store the post ID in the database (add your custom table logic here)
@@ -387,6 +399,8 @@ function chatgpt_ava_private_rewrite()
         // Check if the post title is empty
         if (empty($post->post_title)) {
             return false; // Return zero if title is empty
+
+            error_log('~-~ regenerate_post_title() return false'."\n", 3, CUSTOM_LOG_PATH);
         }
         
         // Update the post title
@@ -397,10 +411,14 @@ function chatgpt_ava_private_rewrite()
 
         wp_update_post($updated_post);
 
+        error_log('~-~ regenerate_post_title() return true'."\n", 3, CUSTOM_LOG_PATH);
+
         return true; // Return 1 to indicate title regeneration was successful
     }
 
     // Filteration function for all inclusions and exclusions like more news and so on...
+    // this function was to, idea of if this site do .. it's not don't do.. filtering stuff...
+    // it's not in use right now!
     function filter_row_post_content($post_id){
 
         $post = get_post($post_id);
@@ -496,13 +514,13 @@ function chatgpt_ava_private_rewrite()
     }
 
 
-//-----------------old code
-        // Solving empty article return because of ' single quotation
-        //$content = str_replace("'", '[SINGLE_QUOTE]', $content); // Replace single quotation marks with a placeholder
-        //$content = str_replace('"', '[DOUBLE_QUOTE]', $content); // Replace double quotation marks with a placeholder
-        // After processing, replace the placeholders back with single quotation marks
-        //$new_content = str_replace('[SINGLE_QUOTE]', "'", $new_content);
-        //$new_content = str_replace('[DOUBLE_QUOTE]', '"', $new_content);
+    //-----------------old code
+    // Solving empty article return because of ' single quotation
+    //$content = str_replace("'", '[SINGLE_QUOTE]', $content); // Replace single quotation marks with a placeholder
+    //$content = str_replace('"', '[DOUBLE_QUOTE]', $content); // Replace double quotation marks with a placeholder
+    // After processing, replace the placeholders back with single quotation marks
+    //$new_content = str_replace('[SINGLE_QUOTE]', "'", $new_content);
+    //$new_content = str_replace('[DOUBLE_QUOTE]', '"', $new_content);
 
 
 
@@ -512,7 +530,7 @@ function chatgpt_ava_private_rewrite()
         if ($text !== false && is_string($text)) {
             // for testing only
              $mzjki = str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
-             error_log('+--+ count_words ::' . $mzjki ."\n", 3, CUSTOM_LOG_PATH);
+             error_log('+!--!+ count_words() ::' . $mzjki ."\n", 3, CUSTOM_LOG_PATH);
 
             return str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
         } else {
@@ -592,13 +610,9 @@ function chatgpt_ava_private_rewrite()
         } else {
             // filter added text like more news ...
             //$filterd_content = filter_row_post_content($post->ID);
-            
-
-
-            //$filterd_content = filter_row_post_content($post->ID);
             $filterd_content = remove_custom_news($post->post_content); 
+            
             // for testing only
-
             error_log('HHH - remove_custom_news = ' . print_r($filterd_content, true)."\n", 3, CUSTOM_LOG_PATH);
 
             $filterd_content = html_entity_decode($filterd_content);
@@ -609,33 +623,26 @@ function chatgpt_ava_private_rewrite()
                 'ID' => $post->ID,
                 'post_content' => $filterd_content,
             ));
+
             /*                
                 wp_update_post(array(
                     'ID' => $post->ID,
                     'post_status' => 'draft',
                 ));
             */
-            // for testing only
-
-
-            //$post = get_post($post->ID);
-
-            //$content = $post->post_content;
-
-            //$decoded_content = html_entity_decode($content);
-
-
+            error_log('content saved successfully!'."\n", 3, CUSTOM_LOG_PATH);
 
             // if <p> filteration return empty article cause of any Special characters issues inside article
             //  I don't have to apply nested code anymore, it's fine to break evrything with this type of posts / Special characters
             // stop before send to API
             if (empty($filterd_content)) {  
                 wp_trash_post($post->ID, true);
-                break; // now this case will nver happen, it's useless code
+                error_log('Error, empty->filterd_content '."\n", 3, CUSTOM_LOG_PATH);
+                break; // now this case will never happen, it's useless code
             }
             // Let's treminate articles less than 130 Word in total, cuase ChatGPT can convert 131 to 200 word fine...            
             elseif (!count_and_manage_posts($post->ID, $filterd_content) ){
-                    error_log('+~~~~~~~===========~~~~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
+                    error_log('+~~~~~~~post handeled~~~~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
                 continue;
             } else {
                     error_log('+~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
@@ -652,8 +659,11 @@ function chatgpt_ava_private_rewrite()
                 $title = $post->post_title;
                 $message_title = "Using Arabic language rewrite {$title}";
                 $generated_title = generate_content_with_min_word_count($message_title, $api_key);
-                regenerate_post_title($post->ID,$generated_title);
-
+                //regenerate_post_title($post->ID,$generated_title);
+                // If empty title stop
+                if (!regenerate_post_title($post->ID,$generated_title)) {
+                    break;
+                }
                 error_log('~old: ' . print_r($title, true)."\n", 3, CUSTOM_LOG_PATH);
                 error_log('~-~: ' . print_r($message_title, true)."\n", 3, CUSTOM_LOG_PATH);
                 error_log('~new: ' . print_r($generated_title, true)."\n", 3, CUSTOM_LOG_PATH);
