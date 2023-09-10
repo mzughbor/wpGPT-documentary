@@ -231,7 +231,6 @@ function remove_custom_news($content) {
 
     // If the div is found, remove it
     if ($divToRemove) {
-        error_log('~ divToRemove ~ post id ::'. $post->ID . "\n", 3, CUSTOM_LOG_PATH);                    
         $divParent = $divToRemove->parentNode;
         $divParent->removeChild($divToRemove);
     }
@@ -282,6 +281,74 @@ function remove_custom_news($content) {
     }
     
     return $content;
+}
+
+// this function used for filtering the keyphrase respone
+function extract_arabic_text($text) {
+
+  // If the text is more than 191 characters long, then only extract the text between "".
+  if (strlen($text) > 191) {
+
+    // Find the position of the first occurrence of the left double quote.
+    $start_position = strpos($text, '"');
+    
+    // Find the position of the next occurrence of the right double quote after the first occurrence.
+    $end_position = strpos($text, '"', $start_position + 1);
+
+    // If the second occurrence of the quote is not found, then the text between the two occurrences is the entire rest of the string.
+    if ($end_position === false) {
+      $end_position = strlen($text);
+    }
+  
+    // Extract the text between the two occurrences.
+    $text_between_quotes = substr($text, $start_position + 1, $end_position - $start_position - 1);
+  
+    // Return the extracted text.
+    return $text_between_quotes;
+        
+  } else {
+    // Check if the text starts with any of the supported keywords.
+    $keywords = array('Focus Keyphrase:',
+        'The focus keyphrase for the given sentence is', 
+        'The focus keyphrase for the given sentence is:',
+        'The keyphrase for the given sentence is',
+        'The keyphrase for the given sentence is:',
+        'The keyphrase for the given text is',
+        'The keyphrase for the given text is:',
+        'Possible focus keyphrase',
+        'Possible focus keyphrase:',
+        'The Focus Keyphrase for this sentence could be',
+        'The Focus Keyphrase for this sentence could be:',
+        'The focus keyphrase for your input is',
+        'The focus keyphrase for your input is:',
+        'The suggested Focus Keyphrase for the given text is',
+        'The suggested Focus Keyphrase for the given text is:',
+        'The Focus Keyphrase for the given text is',
+        'The Focus Keyphrase for the given text is:',
+    );
+    foreach ($keywords as $keyword) {
+      if (strpos($text, $keyword) !== false) {
+        // Extract the Arabic text after the keyword and remove the double quotes.
+        $arabic_text = substr($text, strpos($text, $keyword) + strlen($keyword));
+        $arabic_text = preg_replace('/"+/', '', $arabic_text);
+        break;
+      } else {
+        $arabic_text = substr($text, strpos($text, '"'), strpos($text, '"', strpos($text, '"') ) - strpos($text, '"'));
+      }
+    }
+
+    // If the text does not start with any of the supported keywords, then the text is not in a supported format.
+    if ($arabic_text === '') {
+      // Extract the Arabic text between the double quotes.
+      $arabic_text = preg_replace('/"+/', '', $text);
+    }
+
+    // Remove the single quotes.
+    $arabic_text = preg_replace("/'/", "", $arabic_text);
+  
+    // Return the extracted Arabic text.
+    return $arabic_text;
+  }
 }
 
 // Function to find private posts and rewrite their content
@@ -373,7 +440,7 @@ function chatgpt_ava_private_rewrite()
                 ));
 
 
-                error_log('(+_+) after convert to draft, Content ::' . $content ."\n", 3, CUSTOM_LOG_PATH);
+                error_log('(+_+) Content is to long\Short ... '."\n", 3, CUSTOM_LOG_PATH);
 
 
                 // Store the post ID in the database (add your custom table logic here)
@@ -382,14 +449,13 @@ function chatgpt_ava_private_rewrite()
                 update_option('draft_posts_array', $draft_posts);
                 return false;
             } else {
-                error_log('-- only TRUE case in truncate function: '."\n", 3, CUSTOM_LOG_PATH);
+                error_log('-- only TRUE case in truncate function ...'."\n", 3, CUSTOM_LOG_PATH);
                 return true;
             }
         } else {
-            error_log('-- you are inside else if 1: '."\n", 3, CUSTOM_LOG_PATH);
+            error_log('-- you are inside else if 1... '."\n", 3, CUSTOM_LOG_PATH);
             return false;
         }
-        error_log('-- End of count_and_manage_posts function --' ."\n", 3, CUSTOM_LOG_PATH);
     }
 
     // Regenerating post title with handeling the empyt title situation
@@ -397,10 +463,11 @@ function chatgpt_ava_private_rewrite()
         $post = get_post($post_id);
 
         // Check if the post title is empty
-        if (empty($post->post_title)) {
-            return false; // Return zero if title is empty
-
+        //
+        // if (empty($post->post_title)) { << not working 
+        if (strlen($post->post_title) < 3) {
             error_log('~-~ regenerate_post_title() return false'."\n", 3, CUSTOM_LOG_PATH);
+            return false; // Return zero if title is empty
         }
         
         // Update the post title
@@ -414,6 +481,42 @@ function chatgpt_ava_private_rewrite()
         error_log('~-~ regenerate_post_title() return true'."\n", 3, CUSTOM_LOG_PATH);
 
         return true; // Return 1 to indicate title regeneration was successful
+    }
+
+    // save and generate focus keyphrase
+    function generate_and_set_focus_keyphrase($post_id, $api_key)
+    {
+        // Get the post's filtered content
+        $post = get_post($post_id);
+        $content = $post->post_title;
+        //$message = 'give me Focus Keyphrase for this {$content}';
+        //$message = 'suggest a possible focus keyphrase in Arabic, only 4 words from this brief summary {$content}';
+        $message = 'give me Focus Keyphrase for this %s, please directely print the Keyphrase';
+        $message = sprintf($message, $content);
+
+        // Generate a focus keyphrase using your existing function
+        $generated_keyphrase = generate_content_with_min_word_count($message, $api_key);
+        //$generated_keyphrase = ...($message, $api_key, 1 , 2000 , 1);
+
+        if (!$generated_keyphrase) {
+            // Handle the case where keyphrase generation failed
+            error_log('-- generated_keyphrase function -- Error (1)' ."\n", 3, CUSTOM_LOG_PATH);
+            return false;
+        }
+        
+        error_log('~-~ before filteration: ' . print_r($generated_keyphrase, true)."\n", 3, CUSTOM_LOG_PATH);
+        // filter the response 
+        $generated_keyphrase = extract_arabic_text($generated_keyphrase);
+        // Set the generated keyphrase as the Focus keyphrase using Yoast SEO
+        $set_keyphrase_result = update_post_meta($post_id, '_yoast_wpseo_focuskw', $generated_keyphrase);
+
+        if ($set_keyphrase_result) {
+            error_log('-- Keyphrase set successfully' ."\n", 3, CUSTOM_LOG_PATH);
+            return $generated_keyphrase; // Keyphrase set successfully
+        } else {
+            error_log('-- Failed to set the keyphrase' ."\n", 3, CUSTOM_LOG_PATH);            
+            return false; // Failed to set the keyphrase
+        }
     }
 
     // Filteration function for all inclusions and exclusions like more news and so on...
@@ -529,8 +632,9 @@ function chatgpt_ava_private_rewrite()
     {
         if ($text !== false && is_string($text)) {
             // for testing only
-             $mzjki = str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
-             error_log('+!--!+ count_words() ::' . $mzjki ."\n", 3, CUSTOM_LOG_PATH);
+            $mzjki = str_word_count(preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
+             
+            error_log('+!--!+ count_words() ::' . $mzjki ."\n", 3, CUSTOM_LOG_PATH);
 
             return str_word_count( preg_replace("/[\x{0600}-\x{06FF}a-zA-Z]/u", "a", strip_tags($text)) );
         } else {
@@ -551,6 +655,7 @@ function chatgpt_ava_private_rewrite()
 
     // Recursive function to generate content until it meets the minimum word count requirement
     function generate_content_with_min_word_count($filtered_content, $api_key)
+    //function ...($filtered_content, $api_key, $temperature = 1, $max_tokens = 4096, $top_p = 1)
     {
         $response = wp_remote_post('https://api.openai.com/v1/chat/completions', array(
             'headers' => array(
@@ -564,6 +669,11 @@ function chatgpt_ava_private_rewrite()
                     array('role' => 'user', 'content' => $filtered_content),
                 ),
                 'model' => 'gpt-3.5-turbo', // Use the gpt-3.5-turbo model name here
+                //'temperature' => $temperature,  // Adjust temperature as needed (0.2 to 1.0)
+                //'max_tokens' => $max_tokens,    // Limit the response length (adjust as needed)
+                //'top_p' => $top_p,
+                //'frequency_penalty' => 0,
+                //'presence_penalty' => 0
             )),
         ));
 
@@ -608,17 +718,11 @@ function chatgpt_ava_private_rewrite()
             continue;
         // Rest of the code to generate and update content based on the API response...
         } else {
+
             // filter added text like more news ...
             //$filterd_content = filter_row_post_content($post->ID);
-            $filterd_content = remove_custom_news($post->post_content); 
-            
-            // for testing only
-            error_log('HHH - remove_custom_news = ' . print_r($filterd_content, true)."\n", 3, CUSTOM_LOG_PATH);
-
+            $filterd_content = remove_custom_news($post->post_content);
             $filterd_content = html_entity_decode($filterd_content);
-
-            error_log('GGG - remove_custom_news = ' . print_r($filterd_content, true)."\n", 3, CUSTOM_LOG_PATH);
-
             wp_update_post(array(
                 'ID' => $post->ID,
                 'post_content' => $filterd_content,
@@ -640,20 +744,12 @@ function chatgpt_ava_private_rewrite()
                 error_log('Error, empty->filterd_content '."\n", 3, CUSTOM_LOG_PATH);
                 break; // now this case will never happen, it's useless code
             }
-            // Let's treminate articles less than 130 Word in total, cuase ChatGPT can convert 131 to 200 word fine...            
+            // Let's treminate articles less than 115 Word in total, cuase ChatGPT can convert 115 to 200 word fine...For example        
             elseif (!count_and_manage_posts($post->ID, $filterd_content) ){
-                    error_log('+~~~~~~~post handeled~~~~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
+                error_log('+~~~~~~~post handeled~~~~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);
                 continue;
             } else {
-                    error_log('+~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
-                    error_log('+~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
-                    error_log('+~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);                    
-                    //wp_update_post(array('ID' => $post->ID, 'post_status' => 'draft'));
-
-                //break;
-
-
-
+                error_log('+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+'."\n", 3, CUSTOM_LOG_PATH);
 
                 // title regenerate content
                 $title = $post->post_title;
@@ -662,26 +758,77 @@ function chatgpt_ava_private_rewrite()
                 //regenerate_post_title($post->ID,$generated_title);
                 // If empty title stop
                 if (!regenerate_post_title($post->ID,$generated_title)) {
+                    
+                    wp_update_post(array(
+                        'ID' => $post_id,
+                        'post_status' => 'draft'
+                    ));
+                    error_log('(^_*) Draft due error ... '."\n", 3, CUSTOM_LOG_PATH);
+                    $draft_posts = get_option('draft_posts_array', array());
+                    $draft_posts[] = $post_id;
+                    update_option('draft_posts_array', $draft_posts);
                     break;
                 }
                 error_log('~old: ' . print_r($title, true)."\n", 3, CUSTOM_LOG_PATH);
-                error_log('~-~: ' . print_r($message_title, true)."\n", 3, CUSTOM_LOG_PATH);
                 error_log('~new: ' . print_r($generated_title, true)."\n", 3, CUSTOM_LOG_PATH);
 
-                // Updated $message to target 300 words using the Ada model
                 //$message = "rewrite this article {$post_content}, covering it to become less than 300 words in total using the Arabic language. Use a cohesive structure to ensure smooth transitions between ideas, focus on summarizing and shortening the content, and make sure it's at least not less than 250 words. Make it coherent and proficient.";
 
                 $post_content = $filterd_content;
                 // Limit the content length if needed
                 $max_tokens = 3310; // Model's maximum context length
+
                 $filtered_content = chatgpt_ava_truncate_content($post_content, $max_tokens);
-                $message = "Rewrite this article {$filtered_content}, covering it to become less than 400 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, focus on summarizing and shortening the content, and make sure it's at least not less than 300 words. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) make sure that 25% of the sentences you write contain less than 20 words.";
+
+                sleep(2);
+                
+                $update_data = array(
+                    'ID'           => $post->ID,
+                    'post_content' => $filtered_content,
+                );
+
+                $update_result = wp_update_post($update_data);
+
+                $generated_keyphrase = generate_and_set_focus_keyphrase($post->ID, $api_key);
+                error_log('~-~: ' . print_r($generated_keyphrase, true)."\n", 3, CUSTOM_LOG_PATH);
+
+
+                if (!$generated_keyphrase) {
+                    error_log('~break~ed '."\n", 3, CUSTOM_LOG_PATH);
+                    break;
+                }
+
+
+                //$message = "Rewrite this article {$filtered_content}, covering it to become less than 400 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, focus on summarizing and shortening the content, and make sure it's at least not less than 300 words. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) make sure that 25% of the sentences you write contain less than 20 words.";
+                
+                $message = "Rewrite the previous article with using {$generated_keyphrase} as the Focus keyphrase, and make sure to use the exact keyphrase twice in content, covering it to become more than 302 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate two subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, while writing focus on the SEO score of Yoast and the readability score. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) Make sure that 25% of the sentences you write contain less than 20 words. (4) Insert an internal link to visit our site https://wedti.com and another one to follow on social media https://www.instagram.com/webwedti or facebook @webwedti";
+
+                //$message = "Rewrite previous article with using of {$generated_keyphrase} as Focus keyphrase, make sure to use exact keyphrase twice in contnt, covering it to become more than 302 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate two subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, while writing focus on SEO score of Yoast and readability score. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) make sure that 25% of the sentences you write contain less than 20 words. (4) insert internal link to vist our site https://wedti.com and other one to follow on soical media https://www.instagram.com/webwedti";
+
+                //error_log('____________________' ."\n", 3, CUSTOM_LOG_PATH);
+
+                // Get the Yoast SEO object for the post.
+                //$yoast_seo = new WPSEO_SEO_Data($post->ID);
+
+                //error_log(print_r($yoast_seo, true)."\n", 3, CUSTOM_LOG_PATH);
+
+                // Get the notes from Yoast SEO.
+                //$notes = $yoast_seo->get_notes();
+
+                //error_log('____________________' ."\n", 3, CUSTOM_LOG_PATH);
+
+                //error_log(print_r($notes, true)."\n", 3, CUSTOM_LOG_PATH);
+
+
+
+                //$message = "Rewrite this article {$filtered_content} with using of {$generated_keyphrase} as Focus keyphrase, covering it to become more than 302 words in total using the Arabic language. Structure the article with clear headings enclosed within the appropriate heading tags (e.g., <h1>, <h2>, etc.) and generate two subtopics inside the article to use subheadings, each one of them should have at least one paragraph. Use a cohesive structure to ensure smooth transitions between ideas, while writing focus on SEO score of Yoast and readability score. Make it coherent and proficient. Remember to (1) enclose headings in the specified heading tags to make parsing the content easier. (2) Wrap even paragraphs in <p> tags for improved readability. (3) make sure that 25% of the sentences you write contain less than 20 words. (4) insert internal link in the post as outgoing and other one for internal site wedti.com";
 
                 // Generate content and check word count until it meets the minimum requirement
                 $generated_content = generate_content_with_min_word_count($message, $api_key);
                 $word_count = count_words($generated_content);
                 error_log('The first response from api word count: ' . print_r($word_count, true)."\n", 3, CUSTOM_LOG_PATH);
                 //error_log('The response contains the following words: ' . print_r(implode(', ', $found_words), true)."\n", 3, CUSTOM_LOG_PATH);
+
 
 
 
@@ -814,7 +961,7 @@ function chatgpt_ava_private_rewrite()
                     error_log('--not logical--Content generation failed for private post ID: ' . $post->ID."\n", 3, CUSTOM_LOG_PATH);
 
                     wp_update_post(array('ID' => $post->ID, 'post_status' => 'draft'));
-                }   
+                }
                 sleep(10);
             }
         }
