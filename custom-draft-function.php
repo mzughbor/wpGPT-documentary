@@ -1,35 +1,22 @@
 <?php
+
 /**
  * Plugin Name: Test Custom Draft Function
  * Description: Runs a custom function on draft posts.
- * Version: 1.10
+ * Version: 1.21
  * Author: mzughbor
  */
 
-function test_remove_custom_paragraphs($content) {
+define('CUSTOM_DRAFT_LOG_PATH', plugin_dir_path(__FILE__) . 'log.txt');
+//define('CUSTOM_DRAFT_LOG_PATH', WP_CONTENT_DIR . 'plugins/custom-draft-function/log.txt');
 
-    // Define the ID of the div you want to remove
-    $div_id_to_remove = 'After_F_Paragraph';
+$log_dir = dirname(CUSTOM_DRAFT_LOG_PATH);
+if (!file_exists($log_dir)) {
+    mkdir($log_dir, 0755, true);
+}
 
-    // Create a DOMDocument object to parse the post content
-    $dom = new DOMDocument();
-    //$dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    // Load the content using UTF-8 encoding
-    $content = mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8');
-    @$dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+function test_custom_paragraphs($content){
 
-    // Find the div with the specified ID
-    $divToRemove = $dom->getElementById($div_id_to_remove);
-
-    // If the div is found, remove it
-    if ($divToRemove) {
-        $divParent = $divToRemove->parentNode;
-        $divParent->removeChild($divToRemove);
-    }
-
-    // Save the modified HTML back to the post content
-    $content = $dom->saveHTML();
-    
     // Pattern to match the unwanted paragraph with a strong tag    
     // Array of unwanted patterns
     $unwanted_patterns = array(
@@ -47,7 +34,10 @@ function test_remove_custom_paragraphs($content) {
 
         '/اقرأ أيضا:/u', //yalla_kora
         '/اقرأ أيضا:/u', //2
-        '/طالع أيضا/u'
+        '/طالع أيضا/u',
+        
+        '/المراجع/u', //mawdoo3.com // didn't worked 
+        '/محتويات/u', // we'll delete inter div
     );
     //  no-sometimes there is two ones in articles '/أخبار متعلقة/u',
 
@@ -61,9 +51,8 @@ function test_remove_custom_paragraphs($content) {
             $unwanted_pattern_found = true;
 
             // Pattern to match paragraphs or h3 elements with links
-            $pattern_with_links = '/<(li|div|p|h3)>.*<a.*<\/(li|div|p|h3)>/u';
-            //$pattern_with_links = '/<(div|h3|p)>.*<a.*<\/(div|h3|p)><\/a>.*<\/\1>/u';
-
+            $pattern_with_links = '/<(div|p|h3|strong|li)>.*<a.*<\/(div|p|h3|strong|li)>/u';
+            
             // If an unwanted pattern is found, look for links
             if ($unwanted_pattern_found) {
                 // Find paragraphs or h3 elements with links
@@ -87,15 +76,164 @@ function test_remove_custom_paragraphs($content) {
         }
     }
 
-    // future update 13 / dec / 2023 - quick future solve ...
-    // hint problem for the word having link tag , the entir prargaraph will be gone!!        
+    // Define the class names of the divs you want to remove
+    $ids_and_classes_to_remove  = array(
+        'After_F_Paragraph', // Kora+ <id>
+        'related-articles-list1', // mawdoo3 <class>
+        'toc',// mawdoo3
+        'toctitle', // mawdoo3
+        'references', // mawdoo3
+        'printfooter', // mawdoo3
+        'feedback-feature', // mawdoo3
+        'feedback-no-option', // mawdoo3
+        'feedback-thanks-msg', // mawdoo3
+        'feedback-yes-option', // mawdoo3
+    );
 
+    // Create a DOMDocument object to parse the post content
+    $dom = new DOMDocument();
+    $content = mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8');
+    @$dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 
+    // Check if the DOMDocument was created successfully
+    if (!$dom) {
+        // we'll edit return lateer to be at the bottom
+        error_log('Failed .. !dom :: So return content ...\n' , 3, CUSTOM_DRAFT_LOG_PATH);        
+        return $content;
+    }
+
+    // Create a DOMXPath object to query the DOMDocument
+    $xpath = new DOMXPath($dom);
+    
+    // Loop through each class to remove
+    foreach ($ids_and_classes_to_remove as $id_or_class) {
+        // Find the divs with the specified class name using XPath
+        //$divsToRemove = $xpath->query("//*[@class='$class_name']");
+        $divsToRemove = $xpath->query("//*[@id='$id_or_class' or contains(@class, '$id_or_class')]");
+        if ($divsToRemove) {
+            // Remove divs by class name
+            foreach ($divsToRemove as $div) {
+                $divParent = $div->parentNode;
+                $divParent->removeChild($div);
+            }
+        }
+    }
+    // Save the modified HTML back to the post content
+    $content = $dom->saveHTML();
     return $content;
 }
 
 
 
+
+
+
+// not in use for now
+function test_remove_custom_paragraphs($content) {
+
+    // Define the ID of the div you want to remove
+    // Define the IDs and class names of the divs you want to remove
+    $divs_to_remove = array(
+        'After_F_Paragraph',
+        'related-articles-list1',
+        'toc',
+        'toctitle',
+        'references',
+        'printfooter',
+        'feedback-feature',
+        'feedback-no-option',
+        'feedback-thanks-msg',
+        'feedback-yes-option'
+    );
+
+    // Create a DOMDocument object to parse the post content
+    $dom = new DOMDocument();
+    // Load the content using UTF-8 encoding
+    $content = mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8');
+    $dom->loadHTML($content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+    // Loop through each div to remove
+    foreach ($divs_to_remove as $div_identifier) {
+        // Find the divs with the specified ID or class name
+        $divsToRemove = $dom->getElementById($div_identifier);
+        //$divsToRemoveByClass = $dom->getElementsByClassName($div_identifier);
+
+        // Remove divs by ID
+        if ($divsToRemove) {
+            $divParent = $divsToRemove->parentNode;
+            $divParent->removeChild($divsToRemove);
+        }
+
+        // Remove divs by class name
+        /*foreach ($divsToRemoveByClass as $div) {
+            $divParent = $div->parentNode;
+            $divParent->removeChild($div);
+        }*/
+    }
+
+    // Save the modified HTML back to the post content
+    $content = $dom->saveHTML();
+    
+    // Pattern to match the unwanted paragraph with a strong tag    
+    // Array of unwanted patterns
+    $unwanted_patterns = array(
+        '/أقرأ ايضًا:/u', //kora+
+        '/أخبار متعلقة/u',
+        '/طالع أيضًا:/u',
+        '/طالع أيضًا/u',
+        '/WRONGERR/u',
+
+        '/الأخبار الرئيسية/u', // bbc !! not working so we'll remove the inter div...
+        '/قصص مقترحة/u', // bbc
+        '/المزيد حول هذه القصة/u', // bbc
+        '/مواضيع ذات صلة/u', // bbc
+        '/اخترنا لكم/u', // bbc
+
+        '/اقرأ أيضا:/u', //yalla_kora
+        '/اقرأ أيضا:/u', //2
+        '/طالع أيضا/u',
+        
+        '/المراجع/u', //mawdoo3.com // didn't worked 
+        '/محتويات/u', // we'll delete inter div
+    );
+    //  no-sometimes there is two ones in articles '/أخبار متعلقة/u',
+
+    // Flag to indicate whether an unwanted pattern is found
+    $unwanted_pattern_found = false;
+
+    // Loop through patterns and remove them from content
+    foreach ($unwanted_patterns as $pattern) {
+        // $content = preg_replace($pattern, '', $content); // old way
+        if (preg_match($pattern, $content)) {
+            $unwanted_pattern_found = true;
+
+            // Pattern to match paragraphs or h3 elements with links
+            $pattern_with_links = '/<(div|p|h3|strong|li)>.*<a.*<\/(div|p|h3|strong|li)>/u';
+            
+            // If an unwanted pattern is found, look for links
+            if ($unwanted_pattern_found) {
+                // Find paragraphs or h3 elements with links
+                preg_match_all($pattern_with_links, $content, $matches);
+
+                // If there are paragraphs with links
+                if (!empty($matches[0])) {
+                    foreach ($matches[0] as $match) {
+                        // Remove the paragraph
+                        $content = str_replace($match, '', $content);        
+                        // If the removed paragraph doesn't have a link anymore, stop
+                        if (!strpos($match, '<a')) {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Remove the unwanted pattern
+            $content = preg_replace($pattern, '', $content);
+        }
+    }
+    return $content;
+}
 
 
 
@@ -121,7 +259,7 @@ function custom_draft_function() {
     $draft_posts = get_posts($args);
 
     foreach ($draft_posts as $post) {
-        $content = test_remove_custom_paragraphs($post->post_content);
+        $content = test_custom_paragraphs($post->post_content);
         wp_update_post(array(
             'ID' => $post->ID,
             'post_content' => $content,
